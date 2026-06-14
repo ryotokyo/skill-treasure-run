@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🚀 Skill Treasure Run</title>
+  <style>
+    /* ページ全体のスタイル */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      /* パステルグラデーション背景（ページ全体） */
+      background: linear-gradient(135deg, #f5e8ff 0%, #e8eeff 50%, #e8fff5 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Arial', 'Helvetica', sans-serif;
+    }
+
+    /* キャンバス（ゲーム画面）のスタイル */
+    canvas {
+      display: block;
+      border-radius: 20px; /* 角を丸くする */
+      box-shadow:
+        0 8px 40px rgba(140, 80, 220, 0.22), /* 外側の大きい影 */
+        0 2px 10px rgba(0, 0, 0, 0.10);       /* 細かい影 */
+    }
+  </style>
+</head>
+<body>
+
+<!-- ゲームが描画されるキャンバス（Javascriptから操作する） -->
+<canvas id="game"></canvas>
+
+<script>
+// ================================================================
+// 🎮 Skill Treasure Run（スキルトレジャーラン）
+// ================================================================
+// 矢印キーで 🧑‍💻 を動かし、スキルアイテムを集めよう！
+// 敵に当たるとライフが減るよ。60秒間でどれだけ稼げるかな？
+//
+// ▶ 操作方法
+//   移動 : 矢印キー（← ↑ ↓ →）または W A S D
+//   開始 : スペースキー
+//   再開 : R キー（ゲームオーバー後）
+// ================================================================
+
+
+// ================================================================
+// 📐 Section 1: キャンバスのセットアップ
+// ================================================================
+// キャンバス = ゲーム画面（白い紙のようなもの）
+// ctx = キャンバスに絵を描くための「ペン」
+
+const canvas = document.getElementById('game'); // HTMLから <canvas> を取得
+const ctx    = canvas.getContext('2d');          // 2D描画モードで使う
+
+// ゲーム画面のサイズ（ピクセル単位）
+const W     = 480;  // 横幅
+const H     = 640;  // 縦幅
+const HUD_H = 72;   // 上部の情報バー（HUD）の高さ
+
+// キャンバスの実際のサイズをセットする
+canvas.width  = W;
+canvas.height = H;
+
+// プレイヤーが動き回れる範囲（HUDの下から画面下まで）
+const FIELD_TOP    = HUD_H + 8;
+const FIELD_BOTTOM = H - 8;
+const FIELD_LEFT   = 8;
+const FIELD_RIGHT  = W - 8;
+
+
+// ================================================================
+// 🎨 Section 2: カラーパレット（色の定義）
+// ================================================================
+// 色をここにまとめておくと、後で変えやすい
+
+const COLOR = {
+  // HUD（情報バー）
+  hudBg:     'rgba(255, 248, 255, 0.96)', // HUDの背景（薄いピンク白）
+  hudBorder: 'rgba(210, 170, 255, 0.65)', // HUDの下線（薄いパープル）
+
+  // テキスト
+  textDark:  '#4a2a6a', // メインテキスト（濃いパープル）
+  textMid:   '#7a5a9a', // サブテキスト（薄いパープル）
+  textGold:  '#9a6000', // ゴールド（お金の表示）
+  textRed:   '#cc2244', // レッド（ダメージ表示）
+  textBlue:  '#4455cc', // ブルー（スコア表示）
+  textGreen: '#228855', // グリーン（ポジティブ）
+};
+
+
+// ================================================================
+// 📦 Section 3: アイテム・敵・レベルの定義
+// ================================================================
+
+// ── 通常アイテム（よく出現する・白いオーラ） ──
+const NORMAL_ITEMS = [
+  { emoji: '📘', name: 'JSの本',    pts: 100,  money: 1000  },
+  { emoji: '💻', name: '開発経験',  pts: 150,  money: 1500  },
+  { emoji: '🧠', name: '設計力',    pts: 200,  money: 2000  },
+  { emoji: '🔧', name: 'GitHub経験',pts: 200,  money: 2000  },
+  { emoji: '☕', name: '集中力',    pts: 100,  money: 1000  },
+];
+
+// ── レアアイテム（15%の確率で出現・金色オーラ） ──
+const RARE_ITEMS = [
+  { emoji: '💎', name: 'AI活用スキル',     pts: 500,  money: 10000, rare: true },
+  { emoji: '🚀', name: '自作サービス完成', pts: 800,  money: 30000, rare: true },
+  { emoji: '👑', name: '市場価値アップ',   pts: 1000, money: 50000, rare: true },
+];
+
+// ── 敵キャラ ──
+// effect: 'life' → ライフ減少 / 'money' → お金減少 / 'score' → スコア減少
+const ENEMY_TYPES = [
+  { emoji: '😈', name: 'サボり悪魔',     effect: 'life',  value: -1,    spd: 2.0 },
+  { emoji: '🛒', name: '浪費モンスター', effect: 'money', value: -5000, spd: 1.5 },
+  { emoji: '😵', name: '不安オバケ',     effect: 'score', value: -100,  spd: 2.5 },
+];
+
+// ── レベルアップの条件（取得アイテム数で決まる） ──
+// 配列は「条件が高い順」に並べること（上から順に判定するため）
+const LEVEL_TABLE = [
+  { minItems: 15, lv: 5, title: 'お金持ちエンジニア' },
+  { minItems: 10, lv: 4, title: '作れるPM'           },
+  { minItems:  6, lv: 3, title: 'GitHub使える人'     },
+  { minItems:  3, lv: 2, title: '駆け出し開発者'     },
+  { minItems:  0, lv: 1, title: '見習いエンジニア'   },
+];
+
+// ── ゲーム終了時のランク（所持金で決まる） ──
+const RANK_TABLE = [
+  { minMoney: 100000, rank: '🏆 お金持ちエンジニア！', color: '#cc8800' },
+  { minMoney:  60000, rank: '💼 稼げる人材',            color: '#5588cc' },
+  { minMoney:  30000, rank: '📈 スキル成長中',           color: '#22aa66' },
+  { minMoney:  10000, rank: '🌱 副業の芽が出た',         color: '#88aa22' },
+  { minMoney:      0, rank: '📚 まだ修行中',             color: '#8866aa' },
+];
+
+
+// ================================================================
+// 🗂 Section 4: ゲームの状態変数
+// ================================================================
+// 「状態変数」 = ゲームの今の状況を記録する変数
+
+let state = 'TITLE'; // 現在の画面: 'TITLE' / 'PLAYING' / 'GAMEOVER'
+
+// プレイヤーの状態
+let player = {
+  x:         W / 2, // X座標（横位置）
+  y:         H / 2, // Y座標（縦位置）
+  size:      18,    // 当たり判定の半径（ピクセル）
+  invincible: 0,    // 無敵フレーム数（0のとき通常、1以上のとき無敵）
+};
+
+// スコア・お金・ライフ・タイマー
+let score          = 0;  // 現在のスコア（ポイント）
+let money          = 0;  // 現在の所持金（円）
+let lives          = 3;  // 残りライフ
+let timeLeft       = 60; // 残り時間（秒）
+let itemsCollected = 0;  // 取得したアイテムの合計数
+
+// 画面に表示中のオブジェクト
+let items   = []; // アイテムの配列
+let enemies = []; // 敵の配列
+
+// エフェクト用
+let particles  = []; // キラキラパーティクル
+let floatTexts = []; // 「+1000円!」などの浮かぶテキスト
+let shakeTimer = 0;  // 画面揺れの残りフレーム数
+
+// 内部タイマー
+let frameCount    = 0;  // 経過フレーム数（60 = 1秒）
+let lastSecFrame  = 0;  // 最後に1秒カウントしたフレーム
+let spawnTimer    = 0;  // アイテム出現タイマー
+let spawnInterval = 110; // 何フレームごとにアイテムを出すか（短いほど頻繁）
+
+// 敵の追加スポーン済みフラグ（重複スポーン防止）
+let enemy2Added = false; // 浪費モンスターを追加済みか
+let enemy3Added = false; // 不安オバケを追加済みか
+
+
+// ================================================================
+// ⌨️ Section 5: キーボード入力
+// ================================================================
+// 押されているキーを記録する（複数のキーを同時に押せるようにする）
+
+const keys = {}; // { 'ArrowLeft': true, 'ArrowRight': false, ... }
+
+document.addEventListener('keydown', (e) => {
+  keys[e.code] = true; // キーを押したとき → true にセット
+
+  // スペースキーで画面遷移
+  if (e.code === 'Space') {
+    e.preventDefault(); // スペースでページがスクロールしないようにする
+    if (state === 'TITLE') {
+      initGame();       // タイトル画面 → ゲーム開始
+    } else if (state === 'GAMEOVER') {
+      state = 'TITLE';  // ゲームオーバー → タイトルへ戻る
+    }
+  }
+
+  // Rキーでリスタート
+  if (e.code === 'KeyR' && state === 'GAMEOVER') {
+    initGame();
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  keys[e.code] = false; // キーを離したとき → false にセット
+});
+
+
+// ================================================================
+// 🔄 Section 6: ゲームの初期化（リセット）
+// ================================================================
+// ゲームを最初からやり直す処理
+
+function initGame() {
+  // 変数をすべてリセット
+  state          = 'PLAYING';
+  score          = 0;
+  money          = 0;
+  lives          = 3;
+  timeLeft       = 60;
+  itemsCollected = 0;
+  frameCount     = 0;
+  lastSecFrame   = 0;
+  spawnTimer     = 0;
+  spawnInterval  = 110;
+  shakeTimer     = 0;
+  enemy2Added    = false;
+  enemy3Added    = false;
+
+  // プレイヤーを画面中央に配置
+  player.x          = W / 2;
+  player.y          = H / 2;
+  player.invincible = 0;
+
+  // 配列を空にする
+  items      = [];
+  enemies    = [];
+  particles  = [];
+  floatTexts = [];
+
+  // ゲーム開始時に最初の敵を1体出す（サボり悪魔）
+  spawnEnemy(0);
+}
+
+
+// ================================================================
+// 🎲 Section 7: スポーン（アイテム・敵を出現させる）
+// ================================================================
+
+// アイテムを1個、ランダムな位置に出現させる
+function spawnItem() {
+  if (items.length >= 5) return; // 最大5個まで（それ以上は出さない）
+
+  // レア判定：15%の確率でレアアイテム、85%で通常アイテム
+  const isRare = Math.random() < 0.15;
+  const pool   = isRare ? RARE_ITEMS : NORMAL_ITEMS;
+  const def    = pool[Math.floor(Math.random() * pool.length)]; // ランダムに1種類選ぶ
+
+  // プレイフィールド内のランダムな座標
+  const m = 44; // 端からのマージン
+  items.push({
+    ...def, // アイテムの基本情報（emoji, pts, money など）をコピー
+    x:           m + Math.random() * (W - m * 2),
+    y:           FIELD_TOP + m + Math.random() * (FIELD_BOTTOM - FIELD_TOP - m * 2),
+    size:        16,                          // 当たり判定の半径
+    age:         0,                           // 出現からの経過フレーム
+    maxAge:      540,                         // 最大寿命（9秒 = 540フレーム）
+    phaseOffset: Math.random() * Math.PI * 2, // 浮遊アニメのオフセット（各アイテムがバラバラに動くため）
+  });
+}
+
+// 敵を1体出現させる
+// typeIndex: 0 = サボり悪魔, 1 = 浪費モンスター, 2 = 不安オバケ
+function spawnEnemy(typeIndex) {
+  const def = ENEMY_TYPES[typeIndex];
+
+  // プレイヤーから遠い場所に出現させる（近くに出すと不公平なので）
+  let x, y, tries = 0;
+  do {
+    x = FIELD_LEFT  + 30 + Math.random() * (FIELD_RIGHT  - FIELD_LEFT  - 60);
+    y = FIELD_TOP   + 30 + Math.random() * (FIELD_BOTTOM - FIELD_TOP   - 60);
+    tries++;
+  } while (dist(x, y, player.x, player.y) < 130 && tries < 20);
+
+  // ランダムな方向に動き出す
+  const angle = Math.random() * Math.PI * 2;
+  enemies.push({
+    ...def,
+    x, y,
+    vx:          Math.cos(angle) * def.spd, // X方向の速度
+    vy:          Math.sin(angle) * def.spd, // Y方向の速度
+    size:        16, // 当たり判定の半径
+    changeTimer: 0,  // 方向転換タイマー（増えたらランダムに向きを変える）
+  });
+}
+
+
+// ================================================================
+// 📏 Section 8: ユーティリティ関数（便利な小道具）
+// ================================================================
+
+// 2点間の距離を計算する（三平方の定理）
+function dist(x1, y1, x2, y2) {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// 現在のレベルを返す（取得アイテム数から判定）
+function getLevel() {
+  for (const row of LEVEL_TABLE) {
+    if (itemsCollected >= row.minItems) return row; // 条件を満たした最初の行を返す
+  }
+  return LEVEL_TABLE[LEVEL_TABLE.length - 1]; // デフォルト（見習い）
+}
+
+// ゲーム終了時のランクを返す（所持金から判定）
+function getRank() {
+  for (const row of RANK_TABLE) {
+    if (money >= row.minMoney) return row;
+  }
+  return RANK_TABLE[RANK_TABLE.length - 1];
+}
+
+// 数字を「¥12,500」のような形式に変換する
+function fmtMoney(n) {
+  return '¥' + Math.max(0, n).toLocaleString();
+}
+
+
+// ================================================================
+// ✨ Section 9: エフェクト生成
+// ================================================================
+
+// アイテム取得時のキラキラエフェクト
+// x,y: 発生位置、color: パーティクルの色、text: 浮かぶ文字
+function spawnCollectFX(x, y, color, text) {
+  // キラキラパーティクルを8方向に出す
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2; // 均等に8方向
+    const spd   = 2.5 + Math.random() * 2;
+    particles.push({
+      x, y,
+      vx:      Math.cos(angle) * spd,
+      vy:      Math.sin(angle) * spd - 1.2, // 少し上向きにする
+      r:       3.5 + Math.random() * 3,     // 丸の大きさ
+      color,
+      life:    28,
+      maxLife: 28,
+    });
+  }
+
+  // テキストを上に浮かせる
+  floatTexts.push({
+    x,
+    y:       y - 8,
+    text,
+    color,
+    life:    52,
+    maxLife: 52,
+  });
+}
+
+// 画面を揺らす（ダメージを受けたとき）
+function triggerShake() {
+  shakeTimer = 16;
+}
+
+
+// ================================================================
+// 🎯 Section 10: 更新（ゲームロジック）
+// ================================================================
+// 毎フレーム呼ばれる。プレイヤーを動かし、衝突を判定し、状態を更新する。
+
+function update() {
+  if (state !== 'PLAYING') return; // PLAYING 以外は更新しない
+
+  frameCount++; // フレームカウントを1増やす
+
+  // ── プレイヤーの移動 ──────────────────────────────────────────
+  const spd = 4; // プレイヤーの移動速度（ピクセル/フレーム）
+
+  // 押されているキーに応じてX・Y座標を変える
+  if (keys['ArrowLeft']  || keys['KeyA']) player.x -= spd;
+  if (keys['ArrowRight'] || keys['KeyD']) player.x += spd;
+  if (keys['ArrowUp']    || keys['KeyW']) player.y -= spd;
+  if (keys['ArrowDown']  || keys['KeyS']) player.y += spd;
+
+  // フィールドの外に出ないようにクランプ（挟む）する
+  player.x = Math.max(FIELD_LEFT  + player.size, Math.min(FIELD_RIGHT  - player.size, player.x));
+  player.y = Math.max(FIELD_TOP   + player.size, Math.min(FIELD_BOTTOM - player.size, player.y));
+
+  // 無敵フレームのカウントダウン
+  if (player.invincible > 0) player.invincible--;
+
+  // ── 残り時間の更新（60フレームごとに1秒減らす） ─────────────
+  if (frameCount - lastSecFrame >= 60) {
+    lastSecFrame = frameCount;
+    timeLeft--;
+    if (timeLeft <= 0) {
+      timeLeft = 0;
+      state = 'GAMEOVER'; // 時間切れ → ゲームオーバー
+      return;
+    }
+  }
+
+  // ── アイテムのスポーン ────────────────────────────────────────
+  spawnTimer++;
+  if (spawnTimer >= spawnInterval) {
+    spawnTimer = 0;
+    // 残り時間が少なくなるほどスポーン間隔を短くする（最短70フレーム）
+    spawnInterval = Math.max(70, 110 - Math.floor((60 - timeLeft) * 1.2));
+    spawnItem();
+  }
+
+  // ── 敵の追加スポーン（時間経過で増える） ─────────────────────
+  // 残り40秒で浪費モンスターを追加
+  if (!enemy2Added && timeLeft <= 40) {
+    enemy2Added = true;
+    spawnEnemy(1);
+  }
+  // 残り25秒で不安オバケを追加
+  if (!enemy3Added && timeLeft <= 25) {
+    enemy3Added = true;
+    spawnEnemy(2);
+  }
+
+  // ── アイテムの更新 ────────────────────────────────────────────
+  // filter は「true を返した要素だけ残す」配列メソッド
+  items = items.filter(item => {
+    item.age++; // 寿命カウント
+
+    if (item.age >= item.maxAge) return false; // 寿命が尽きたら消す
+
+    // プレイヤーとの当たり判定（円と円の衝突）
+    if (dist(item.x, item.y, player.x, player.y) < item.size + player.size) {
+      // アイテム取得！
+      score          += item.pts;
+      money          += item.money;
+      itemsCollected++;
+
+      // エフェクト（レアは金色、通常は青みがかった白）
+      const fxColor = item.rare ? '#ffcc00' : '#99bbff';
+      const fxText  = `+${item.pts}pt  +${item.money.toLocaleString()}円`;
+      spawnCollectFX(item.x, item.y, fxColor, fxText);
+
+      return false; // アイテムを消す
+    }
+
+    return true; // まだ残す
+  });
+
+  // ── 敵の更新 ──────────────────────────────────────────────────
+  for (const enemy of enemies) {
+    // 移動
+    enemy.x += enemy.vx;
+    enemy.y += enemy.vy;
+
+    // 壁に当たったら反射する（壁バウンド）
+    if (enemy.x < FIELD_LEFT  + enemy.size) { enemy.x = FIELD_LEFT  + enemy.size; enemy.vx *= -1; }
+    if (enemy.x > FIELD_RIGHT - enemy.size) { enemy.x = FIELD_RIGHT - enemy.size; enemy.vx *= -1; }
+    if (enemy.y < FIELD_TOP   + enemy.size) { enemy.y = FIELD_TOP   + enemy.size; enemy.vy *= -1; }
+    if (enemy.y > FIELD_BOTTOM - enemy.size){ enemy.y = FIELD_BOTTOM - enemy.size; enemy.vy *= -1; }
+
+    // 一定フレームごとにランダムに方向転換する
+    enemy.changeTimer++;
+    if (enemy.changeTimer > 80 + Math.random() * 60) {
+      enemy.changeTimer = 0;
+      const angle = Math.random() * Math.PI * 2;
+      enemy.vx = Math.cos(angle) * enemy.spd;
+      enemy.vy = Math.sin(angle) * enemy.spd;
+    }
+
+    // プレイヤーとの当たり判定（無敵中はスキップ）
+    if (player.invincible > 0) continue;
+    if (dist(enemy.x, enemy.y, player.x, player.y) >= enemy.size + player.size) continue;
+
+    // ヒット！ダメージを与える
+    if (enemy.effect === 'life') {
+      lives--;
+      floatTexts.push({ x: player.x, y: player.y - 24, text: '💔 ライフ－１！', color: COLOR.textRed, life: 60, maxLife: 60 });
+    } else if (enemy.effect === 'money') {
+      money = Math.max(0, money + enemy.value);
+      floatTexts.push({ x: player.x, y: player.y - 24, text: `💸 ${Math.abs(enemy.value).toLocaleString()}円 減！`, color: COLOR.textRed, life: 60, maxLife: 60 });
+    } else if (enemy.effect === 'score') {
+      score = Math.max(0, score + enemy.value);
+      floatTexts.push({ x: player.x, y: player.y - 24, text: `😵 スコア${Math.abs(enemy.value)}減！`, color: COLOR.textRed, life: 60, maxLife: 60 });
+    }
+
+    player.invincible = 120; // 2秒間の無敵（120フレーム）
+    triggerShake();
+
+    // ライフが0になったらゲームオーバー
+    if (lives <= 0) {
+      lives = 0;
+      state = 'GAMEOVER';
+      return;
+    }
+  }
+
+  // ── パーティクルの更新 ────────────────────────────────────────
+  particles = particles.filter(p => {
+    p.x  += p.vx;
+    p.y  += p.vy;
+    p.vy += 0.12; // 重力（だんだん落ちる）
+    p.life--;
+    return p.life > 0; // 寿命が0になったら消す
+  });
+
+  // ── 浮かぶテキストの更新 ──────────────────────────────────────
+  floatTexts = floatTexts.filter(t => {
+    t.y -= 0.9; // 上に移動
+    t.life--;
+    return t.life > 0;
+  });
+
+  // ── 画面揺れのカウントダウン ──────────────────────────────────
+  if (shakeTimer > 0) shakeTimer--;
+}
+
+
+// ================================================================
+// 🖼 Section 11: 描画関数
+// ================================================================
+// 「draw〇〇」という関数が、それぞれのパーツを描く
+
+// ── 背景 ────────────────────────────────────────────────────────
+function drawBackground() {
+  // パステルグラデーション
+  const grad = ctx.createLinearGradient(0, HUD_H, 0, H);
+  grad.addColorStop(0,   '#fef2ff'); // 薄いピンク
+  grad.addColorStop(0.5, '#f0f4ff'); // 薄いラベンダー
+  grad.addColorStop(1,   '#eafff5'); // 薄いミント
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, HUD_H, W, H - HUD_H);
+
+  // 装飾用の小さいドット
+  ctx.fillStyle = 'rgba(190, 165, 255, 0.13)';
+  for (let gx = 24; gx < W; gx += 40) {
+    for (let gy = HUD_H + 20; gy < H; gy += 40) {
+      ctx.beginPath();
+      ctx.arc(gx, gy, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+// ── HUD（情報バー）──────────────────────────────────────────────
+function drawHUD() {
+  // HUD背景（白みがかったパネル）
+  ctx.fillStyle = COLOR.hudBg;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, W, HUD_H, [0, 0, 14, 14]); // 下の角だけ丸くする
+  ctx.fill();
+
+  // 下線
+  ctx.strokeStyle = COLOR.hudBorder;
+  ctx.lineWidth   = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(0, HUD_H);
+  ctx.lineTo(W, HUD_H);
+  ctx.stroke();
+
+  ctx.textBaseline = 'alphabetic';
+
+  // ── 1行目 ──
+  // ❤️ ライフ（左）
+  ctx.font      = '13px Arial';
+  ctx.fillStyle = COLOR.textDark;
+  ctx.textAlign = 'left';
+  ctx.fillText('ライフ', 14, 22);
+
+  // ⏱ 残り時間（中央）
+  ctx.textAlign = 'center';
+  ctx.fillStyle = timeLeft <= 10 ? COLOR.textRed : COLOR.textDark;
+  ctx.font      = '11px Arial';
+  ctx.fillText('⏱ 残り時間', W / 2, 18);
+  ctx.font      = `bold ${timeLeft <= 10 ? 26 : 22}px Arial`;
+  ctx.fillText(`${timeLeft}秒`, W / 2, 46);
+
+  // 🏆 スコア（右）
+  ctx.textAlign = 'right';
+  ctx.fillStyle = COLOR.textBlue;
+  ctx.font      = 'bold 13px Arial';
+  ctx.fillText(`🏆 ${score.toLocaleString()}pt`, W - 14, 22);
+
+  // ── 2行目 ──
+  // ❤️ ハート（左）
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font         = '18px serif';
+  const heartsStr =
+    '❤️'.repeat(Math.max(0, lives)) +
+    '🖤'.repeat(Math.max(0, 3 - lives));
+  ctx.fillText(heartsStr, 12, 55);
+  ctx.textBaseline = 'alphabetic';
+
+  // 💰 お金（中央左よりに）
+  ctx.textAlign = 'center';
+  ctx.fillStyle = COLOR.textGold;
+  ctx.font      = 'bold 13px Arial';
+  ctx.fillText(`💰 ${fmtMoney(money)}`, W / 2 - 60, 62);
+
+  // 👔 レベル・肩書き（右）
+  const lv = getLevel();
+  ctx.textAlign = 'right';
+  ctx.fillStyle = COLOR.textMid;
+  ctx.font      = '11px Arial';
+  ctx.fillText(`Lv.${lv.lv} ${lv.title}`, W - 14, 62);
+}
+
+// ── プレイヤー ──────────────────────────────────────────────────
+function drawPlayer() {
+  const p = player;
+
+  // 無敵中は点滅させる（6フレームごとに表示/非表示）
+  if (p.invincible > 0 && Math.floor(frameCount / 5) % 2 === 1) return;
+
+  // 周囲に薄い輝きをつける
+  ctx.fillStyle = 'rgba(170, 140, 255, 0.18)';
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.size + 8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // プレイヤー絵文字
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font         = '32px serif';
+  ctx.fillText('🧑‍💻', p.x, p.y);
+  ctx.textBaseline = 'alphabetic';
+}
+
+// ── アイテム ─────────────────────────────────────────────────────
+function drawItems() {
+  for (const item of items) {
+    // 浮遊アニメーション（sin波で上下にふわふわ動く）
+    const floatY = Math.sin(frameCount * 0.055 + item.phaseOffset) * 4;
+
+    // 寿命が残り25%を切ったら点滅させる（消えることをプレイヤーに知らせる）
+    const nearEnd = item.age > item.maxAge * 0.75;
+    if (nearEnd && Math.floor(item.age / 7) % 2 === 0) continue;
+
+    const drawX = item.x;
+    const drawY = item.y + floatY;
+
+    // レアアイテムは金色の輝きをつける
+    if (item.rare) {
+      const glow = 0.35 + Math.sin(frameCount * 0.12) * 0.2;
+      ctx.fillStyle = `rgba(255, 200, 40, ${glow})`;
+      ctx.beginPath();
+      ctx.arc(drawX, drawY, item.size + 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // アイテムの背景円
+    ctx.fillStyle = item.rare
+      ? 'rgba(255, 250, 210, 0.88)' // レアは淡い黄色
+      : 'rgba(255, 255, 255, 0.78)'; // 通常は白
+    ctx.beginPath();
+    ctx.arc(drawX, drawY, item.size + 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 枠線
+    ctx.strokeStyle = item.rare
+      ? 'rgba(220, 160, 0, 0.5)'
+      : 'rgba(180, 160, 220, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(drawX, drawY, item.size + 2, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 絵文字
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font         = '22px serif';
+    ctx.fillText(item.emoji, drawX, drawY);
+    ctx.textBaseline = 'alphabetic';
+  }
+}
+
+// ── 敵 ───────────────────────────────────────────────────────────
+function drawEnemies() {
+  for (const enemy of enemies) {
+    // ゆらゆらアニメーション
+    const floatY = Math.sin(frameCount * 0.07 + enemy.x * 0.01) * 3;
+    const drawX  = enemy.x;
+    const drawY  = enemy.y + floatY;
+
+    // 敵の周りに赤みがかったオーラ（脅威感を出す）
+    const pulse = 0.2 + Math.sin(frameCount * 0.1) * 0.08;
+    ctx.fillStyle = `rgba(255, 80, 80, ${pulse})`;
+    ctx.beginPath();
+    ctx.arc(drawX, drawY, enemy.size + 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 背景円
+    ctx.fillStyle = 'rgba(255, 235, 235, 0.82)';
+    ctx.beginPath();
+    ctx.arc(drawX, drawY, enemy.size + 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 絵文字
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font         = '26px serif';
+    ctx.fillText(enemy.emoji, drawX, drawY);
+    ctx.textBaseline = 'alphabetic';
+  }
+}
+
+// ── エフェクト（パーティクル + 浮かぶテキスト） ─────────────────
+function drawEffects() {
+  // パーティクル（キラキラ光る丸）
+  for (const p of particles) {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle   = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1; // 透明度をデフォルトに戻す
+
+  // 浮かぶテキスト
+  for (const t of floatTexts) {
+    const alpha = Math.min(1, (t.life / t.maxLife) * 2.5);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle   = t.color;
+    ctx.font        = 'bold 13px Arial';
+    ctx.textAlign   = 'center';
+    ctx.fillText(t.text, t.x, t.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── タイトル画面 ─────────────────────────────────────────────────
+function drawTitle() {
+  // 背景グラデーション
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0,   '#fce8ff');
+  grad.addColorStop(0.5, '#e8eeff');
+  grad.addColorStop(1,   '#e8fff8');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // 背景ドット
+  ctx.fillStyle = 'rgba(180, 150, 255, 0.12)';
+  for (let gx = 24; gx < W; gx += 40)
+    for (let gy = 24; gy < H; gy += 40) {
+      ctx.beginPath();
+      ctx.arc(gx, gy, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+  ctx.textAlign = 'center';
+
+  // ── ゲームタイトル ──
+  ctx.font      = 'bold 44px Arial';
+  ctx.fillStyle = '#5a2a8a';
+  ctx.fillText('🚀 Skill', W / 2, 130);
+  ctx.fillText('Treasure Run', W / 2, 178);
+
+  ctx.font      = '18px Arial';
+  ctx.fillStyle = '#8a5aaa';
+  ctx.fillText('スキルトレジャーラン', W / 2, 208);
+
+  // 区切り線
+  ctx.strokeStyle = 'rgba(180, 140, 240, 0.4)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - 160, 224);
+  ctx.lineTo(W / 2 + 160, 224);
+  ctx.stroke();
+
+  // ── ルール説明 ──
+  ctx.font      = '14px Arial';
+  ctx.fillStyle = '#6a4a8a';
+  const rules = [
+    '矢印キーで 🧑‍💻 を動かそう！',
+    'スキルアイテムを集めてお金持ちエンジニアへ✨',
+    '敵（😈🛒😵）に当たるとライフが減るよ',
+    '60秒間でどれだけ稼げるかな？',
+  ];
+  rules.forEach((r, i) => ctx.fillText(r, W / 2, 258 + i * 26));
+
+  // ── アイテムプレビュー ──
+  ctx.font      = '13px Arial';
+  ctx.fillStyle = '#8a6aaa';
+  ctx.fillText('集めるアイテム ✨', W / 2, 374);
+  const emojis = ['📘','💻','🧠','🔧','☕','💎','🚀','👑'];
+  ctx.font = '22px serif';
+  ctx.textBaseline = 'middle';
+  emojis.forEach((e, i) => ctx.fillText(e, 34 + i * 52, 400));
+  ctx.textBaseline = 'alphabetic';
+
+  // ── スタートボタン（点滅） ──
+  if (Math.floor(Date.now() / 560) % 2 === 0) {
+    ctx.fillStyle = '#7a3aaa';
+    ctx.font      = 'bold 18px Arial';
+    ctx.fillText('▶   スペースキーでスタート   ◀', W / 2, 466);
+  }
+
+  // ── 操作方法 ──
+  ctx.font      = '12px Arial';
+  ctx.fillStyle = '#aa88bb';
+  ctx.fillText('移動：← ↑ ↓ →　または　W A S D', W / 2, 506);
+
+  // ── スコアランク表 ──
+  ctx.font      = '11px Arial';
+  ctx.fillStyle = '#9977bb';
+  ctx.fillText('💰 100,000円以上 → お金持ちエンジニア達成！', W / 2, 546);
+  ctx.fillText('💰 60,000円 以上 → 稼げる人材', W / 2, 564);
+  ctx.fillText('💰 30,000円 以上 → スキル成長中', W / 2, 582);
+  ctx.strokeStyle = 'rgba(160, 120, 200, 0.45)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.roundRect(W / 2 - 175, 532, 350, 60, 8);
+  ctx.stroke();
+}
+
+// ── ゲームオーバー画面 ───────────────────────────────────────────
+function drawGameOver() {
+  // 半透明の暗いオーバーレイ
+  ctx.fillStyle = 'rgba(40, 15, 65, 0.82)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+
+  // タイトル
+  ctx.font      = 'bold 36px Arial';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('🎉 ゲーム終了！', W / 2, 128);
+
+  // ── 結果パネル ──
+  ctx.fillStyle = 'rgba(255, 248, 255, 0.97)';
+  ctx.beginPath();
+  ctx.roundRect(W / 2 - 185, 146, 370, 272, 18);
+  ctx.fill();
+
+  // 枠線（ゴールド）
+  const rank = getRank();
+  ctx.strokeStyle = rank.color;
+  ctx.lineWidth   = 2.5;
+  ctx.beginPath();
+  ctx.roundRect(W / 2 - 185, 146, 370, 272, 18);
+  ctx.stroke();
+
+  // ランク名
+  ctx.font      = 'bold 22px Arial';
+  ctx.fillStyle = rank.color;
+  ctx.fillText(rank.rank, W / 2, 190);
+
+  // スコア・お金・肩書き・取得数
+  const rows = [
+    { label: `🏆 スコア`, value: `${score.toLocaleString()} pt`,          color: COLOR.textBlue  },
+    { label: `💰 所持金`, value: `${fmtMoney(money)}`,                    color: COLOR.textGold  },
+    { label: `👔 肩書き`, value: `Lv.${getLevel().lv} ${getLevel().title}`, color: COLOR.textMid  },
+    { label: `📦 スキル`, value: `${itemsCollected} 個取得`,               color: COLOR.textGreen },
+  ];
+  rows.forEach((r, i) => {
+    const y = 228 + i * 36;
+    ctx.font      = '14px Arial';
+    ctx.fillStyle = '#8a6aaa';
+    ctx.textAlign = 'left';
+    ctx.fillText(r.label, W / 2 - 155, y);
+    ctx.font      = 'bold 14px Arial';
+    ctx.fillStyle = r.color;
+    ctx.textAlign = 'right';
+    ctx.fillText(r.value, W / 2 + 155, y);
+  });
+
+  ctx.textAlign = 'center';
+
+  // 次回への一言
+  ctx.font      = '12px Arial';
+  ctx.fillStyle = '#9977aa';
+  ctx.fillText(
+    money >= 100000 ? '🎊 お金持ちエンジニア達成！最高記録を更新しよう！'
+    : money >= 60000  ? '惜しい！もう少しで¥100,000円！'
+    : money >= 30000  ? 'レアアイテム（💎🚀👑）を意識してみよう！'
+    :                   '💡 敵を避けてアイテムを集めよう！',
+    W / 2, 380
+  );
+
+  // ── ボタン ──
+  // リスタートボタン
+  ctx.fillStyle = 'rgba(120, 70, 200, 0.92)';
+  ctx.beginPath();
+  ctx.roundRect(W / 2 - 160, 438, 140, 46, 12);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font      = 'bold 14px Arial';
+  ctx.fillText('[ R ] もう一度', W / 2 - 90, 466);
+
+  // タイトルへボタン
+  ctx.fillStyle = 'rgba(90, 55, 160, 0.92)';
+  ctx.beginPath();
+  ctx.roundRect(W / 2 + 20, 438, 140, 46, 12);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('[SPC] タイトルへ', W / 2 + 90, 466);
+
+  // ── ランク一覧（2行に分けて表示） ──
+  ctx.font      = '11px Arial';
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillText('📚¥0〜  🌱¥10,000〜  📈¥30,000〜', W / 2, 498);
+  ctx.fillText('💼¥60,000〜  🏆¥100,000〜 お金持ちエンジニア！', W / 2, 514);
+}
+
+
+// ================================================================
+// 🔁 Section 12: メインループ
+// ================================================================
+// ゲームの「心臓部」。更新 → 描画 を60fpsで繰り返す。
+
+function draw() {
+  // キャンバスをクリア（前のフレームの絵を消す）
+  ctx.clearRect(0, 0, W, H);
+
+  // 画面揺れの計算
+  const sx = shakeTimer > 0 ? (Math.random() - 0.5) * 6 : 0;
+  const sy = shakeTimer > 0 ? (Math.random() - 0.5) * 6 : 0;
+  ctx.save();
+  ctx.translate(sx, sy); // 揺れの分だけ描画位置をずらす
+
+  // 現在の状態に応じて描画する画面を切り替える
+  if (state === 'TITLE') {
+    drawTitle(); // タイトル画面
+
+  } else if (state === 'PLAYING') {
+    drawBackground(); // 背景
+    drawItems();      // アイテム
+    drawEnemies();    // 敵
+    drawPlayer();     // プレイヤー
+    drawEffects();    // エフェクト
+    drawHUD();        // HUD（情報バー）※最後に描いて最前面に表示
+
+  } else if (state === 'GAMEOVER') {
+    // ゲームオーバーもゲーム画面の上にパネルを重ねる
+    drawBackground();
+    drawItems();
+    drawEnemies();
+    drawPlayer();
+    drawEffects();
+    drawHUD();
+    drawGameOver();   // ゲームオーバーパネルを最前面に重ねる
+  }
+
+  ctx.restore(); // 揺れのtranslateを元に戻す
+}
+
+// メインループ本体
+function loop() {
+  update(); // ゲームの状態を更新（プレイヤー移動・当たり判定など）
+  draw();   // 画面に描画する
+  requestAnimationFrame(loop); // 次のフレームでまた呼び出す（約60fps）
+}
+
+// ループ開始！
+loop();
+
+</script>
+</body>
+</html>
