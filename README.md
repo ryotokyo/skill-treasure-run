@@ -57,7 +57,7 @@
 
 ## 画面イメージ
 
-![タイトル画面](kill_Treasure_Run_Screenshot.png)
+<img src="kill_Treasure_Run_Screenshot.png" width="300">
 
 ---
 
