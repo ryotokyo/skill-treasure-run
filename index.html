@@ -39,7 +39,7 @@
 // 🎮 Skill Treasure Run（スキルトレジャーラン）
 // ================================================================
 // 矢印キーで 🧑‍💻 を動かし、スキルアイテムを集めよう！
-// 敵に当たるとライフが減るよ。60秒間でどれだけ稼げるかな？
+// 敵に当たると年収が減るよ。20秒間でどれだけ稼げるかな？
 //
 // ▶ 操作方法
 //   移動 : 矢印キー（← ↑ ↓ →）または W A S D
@@ -99,26 +99,26 @@ const COLOR = {
 
 // ── 通常アイテム（よく出現する・白いオーラ） ──
 const NORMAL_ITEMS = [
-  { emoji: '📘', name: 'JSの本',    pts: 100,  money: 1000  },
-  { emoji: '💻', name: '開発経験',  pts: 150,  money: 1500  },
-  { emoji: '🧠', name: '設計力',    pts: 200,  money: 2000  },
-  { emoji: '🔧', name: 'GitHub経験',pts: 200,  money: 2000  },
-  { emoji: '☕', name: '集中力',    pts: 100,  money: 1000  },
+  { emoji: '📘', name: 'JSの本',    pts: 100,  money: 1000000 },
+  { emoji: '💻', name: '開発経験',  pts: 150,  money: 2000000 },
+  { emoji: '🧠', name: '設計力',    pts: 200,  money: 3000000 },
+  { emoji: '🔧', name: 'GitHub経験',pts: 200,  money: 3000000 },
+  { emoji: '☕', name: '集中力',    pts: 100,  money: 1000000 },
 ];
 
 // ── レアアイテム（15%の確率で出現・金色オーラ） ──
 const RARE_ITEMS = [
-  { emoji: '💎', name: 'AI活用スキル',     pts: 500,  money: 10000, rare: true },
-  { emoji: '🚀', name: '自作サービス完成', pts: 800,  money: 30000, rare: true },
-  { emoji: '👑', name: '市場価値アップ',   pts: 1000, money: 50000, rare: true },
+  { emoji: '💎', name: 'AI活用スキル',     pts: 500,  money: 6000000,  rare: true },
+  { emoji: '🚀', name: '自作サービス完成', pts: 800,  money: 20000000, rare: true },
+  { emoji: '👑', name: '市場価値アップ',   pts: 1000, money: 40000000, rare: true },
 ];
 
 // ── 敵キャラ ──
-// effect: 'life' → ライフ減少 / 'money' → お金減少 / 'score' → スコア減少
+// effect: 'money' → 年収減少
 const ENEMY_TYPES = [
-  { emoji: '😈', name: 'サボり悪魔',     effect: 'life',  value: -1,    spd: 2.0 },
-  { emoji: '🛒', name: '浪費モンスター', effect: 'money', value: -5000, spd: 1.5 },
-  { emoji: '😵', name: '不安オバケ',     effect: 'score', value: -100,  spd: 2.5 },
+  { emoji: '😈', name: 'サボり悪魔',     effect: 'money', value: -3000000, spd: 2.0 },
+  { emoji: '🛒', name: '浪費モンスター', effect: 'money', value: -2000000, spd: 1.5 },
+  { emoji: '😵', name: '不安オバケ',     effect: 'money', value: -1500000, spd: 2.5 },
 ];
 
 // ── レベルアップの条件（取得アイテム数で決まる） ──
@@ -133,11 +133,16 @@ const LEVEL_TABLE = [
 
 // ── ゲーム終了時のランク（所持金で決まる） ──
 const RANK_TABLE = [
-  { minMoney: 100000, rank: '🏆 お金持ちエンジニア！', color: '#cc8800' },
-  { minMoney:  60000, rank: '💼 稼げる人材',            color: '#5588cc' },
-  { minMoney:  30000, rank: '📈 スキル成長中',           color: '#22aa66' },
-  { minMoney:  10000, rank: '🌱 副業の芽が出た',         color: '#88aa22' },
-  { minMoney:      0, rank: '📚 まだ修行中',             color: '#8866aa' },
+  { minMoney: 100000000, rank: '🏆 神エンジニア・完全勝利！',   color: '#cc8800' },
+  { minMoney:  85000000, rank: '👑 伝説のフリーランス神',       color: '#cc4444' },
+  { minMoney:  70000000, rank: '🦄 ユニコーン企業のCTO',        color: '#dd6600' },
+  { minMoney:  50000000, rank: '💰 小金持ちエンジニア',         color: '#cc8822' },
+  { minMoney:  40000000, rank: '🌏 外資に拾われた逸材',         color: '#5599dd' },
+  { minMoney:  30000000, rank: '🔥 スタートアップCTO候補',      color: '#44aaaa' },
+  { minMoney:  20000000, rank: '🧑‍💼 副業で稼ぐ意識高い系',     color: '#22aa66' },
+  { minMoney:  10000000, rank: '💡 大台！でも税金が辛い',       color: '#5577cc' },
+  { minMoney:   5000000, rank: '😤 手取り薄いSES社員',          color: '#7755aa' },
+  { minMoney:         0, rank: '📚 勉強中（無収入）',           color: '#888888' },
 ];
 
 
@@ -156,11 +161,10 @@ let player = {
   invincible: 0,    // 無敵フレーム数（0のとき通常、1以上のとき無敵）
 };
 
-// スコア・お金・ライフ・タイマー
+// スコア・お金・タイマー
 let score          = 0;  // 現在のスコア（ポイント）
 let money          = 0;  // 現在の所持金（円）
-let lives          = 3;  // 残りライフ
-let timeLeft       = 60; // 残り時間（秒）
+let timeLeft       = 20; // 残り時間（秒）
 let itemsCollected = 0;  // 取得したアイテムの合計数
 
 // 画面に表示中のオブジェクト
@@ -176,7 +180,7 @@ let shakeTimer = 0;  // 画面揺れの残りフレーム数
 let frameCount    = 0;  // 経過フレーム数（60 = 1秒）
 let lastSecFrame  = 0;  // 最後に1秒カウントしたフレーム
 let spawnTimer    = 0;  // アイテム出現タイマー
-let spawnInterval = 110; // 何フレームごとにアイテムを出すか（短いほど頻繁）
+let spawnInterval = 70; // 何フレームごとにアイテムを出すか（短いほど頻繁）
 
 // 敵の追加スポーン済みフラグ（重複スポーン防止）
 let enemy2Added = false; // 浪費モンスターを追加済みか
@@ -198,9 +202,12 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault(); // スペースでページがスクロールしないようにする
     if (state === 'TITLE') {
       initGame();       // タイトル画面 → ゲーム開始
-    } else if (state === 'GAMEOVER') {
-      state = 'TITLE';  // ゲームオーバー → タイトルへ戻る
     }
+  }
+
+  // Tキーでタイトルへ戻る
+  if (e.code === 'KeyT' && state === 'GAMEOVER') {
+    state = 'TITLE';
   }
 
   // Rキーでリスタート
@@ -224,13 +231,12 @@ function initGame() {
   state          = 'PLAYING';
   score          = 0;
   money          = 0;
-  lives          = 3;
-  timeLeft       = 60;
+  timeLeft       = 20;
   itemsCollected = 0;
   frameCount     = 0;
   lastSecFrame   = 0;
   spawnTimer     = 0;
-  spawnInterval  = 110;
+  spawnInterval  = 70;
   shakeTimer     = 0;
   enemy2Added    = false;
   enemy3Added    = false;
@@ -257,10 +263,10 @@ function initGame() {
 
 // アイテムを1個、ランダムな位置に出現させる
 function spawnItem() {
-  if (items.length >= 5) return; // 最大5個まで（それ以上は出さない）
+  if (items.length >= 7) return; // 最大7個まで（それ以上は出さない）
 
   // レア判定：15%の確率でレアアイテム、85%で通常アイテム
-  const isRare = Math.random() < 0.15;
+  const isRare = Math.random() < 0.18;
   const pool   = isRare ? RARE_ITEMS : NORMAL_ITEMS;
   const def    = pool[Math.floor(Math.random() * pool.length)]; // ランダムに1種類選ぶ
 
@@ -332,7 +338,18 @@ function getRank() {
 
 // 数字を「¥12,500」のような形式に変換する
 function fmtMoney(n) {
-  return '¥' + Math.max(0, n).toLocaleString();
+  const v = Math.max(0, n);
+  if (v >= 100000000) return `¥${(v / 100000000).toFixed(1)}億`;
+  if (v >= 10000)     return `¥${Math.floor(v / 10000)}万`;
+  return '¥' + v.toLocaleString();
+}
+
+// ハイスコア（localStorage）
+function getHighScore() {
+  return parseInt(localStorage.getItem('strHighScore') || '0', 10);
+}
+function updateHighScore() {
+  if (money > getHighScore()) localStorage.setItem('strHighScore', String(money));
 }
 
 
@@ -388,11 +405,14 @@ function update() {
   // ── プレイヤーの移動 ──────────────────────────────────────────
   const spd = 4; // プレイヤーの移動速度（ピクセル/フレーム）
 
-  // 押されているキーに応じてX・Y座標を変える
-  if (keys['ArrowLeft']  || keys['KeyA']) player.x -= spd;
-  if (keys['ArrowRight'] || keys['KeyD']) player.x += spd;
-  if (keys['ArrowUp']    || keys['KeyW']) player.y -= spd;
-  if (keys['ArrowDown']  || keys['KeyS']) player.y += spd;
+  // 押されているキーをベクトルに変換（斜め移動も等速になるよう正規化）
+  const moveX = (keys['ArrowRight'] || keys['KeyD'] ? 1 : 0) - (keys['ArrowLeft'] || keys['KeyA'] ? 1 : 0);
+  const moveY = (keys['ArrowDown']  || keys['KeyS'] ? 1 : 0) - (keys['ArrowUp']   || keys['KeyW'] ? 1 : 0);
+  const moveLen = Math.sqrt(moveX * moveX + moveY * moveY);
+  if (moveLen > 0) {
+    player.x += (moveX / moveLen) * spd;
+    player.y += (moveY / moveLen) * spd;
+  }
 
   // フィールドの外に出ないようにクランプ（挟む）する
   player.x = Math.max(FIELD_LEFT  + player.size, Math.min(FIELD_RIGHT  - player.size, player.x));
@@ -406,7 +426,9 @@ function update() {
     lastSecFrame = frameCount;
     timeLeft--;
     if (timeLeft <= 0) {
-      timeLeft = 0;
+      timeLeft   = 0;
+      shakeTimer = 0;
+      updateHighScore();
       state = 'GAMEOVER'; // 時間切れ → ゲームオーバー
       return;
     }
@@ -417,18 +439,18 @@ function update() {
   if (spawnTimer >= spawnInterval) {
     spawnTimer = 0;
     // 残り時間が少なくなるほどスポーン間隔を短くする（最短70フレーム）
-    spawnInterval = Math.max(70, 110 - Math.floor((60 - timeLeft) * 1.2));
+    spawnInterval = Math.max(40, 70 - Math.floor((20 - timeLeft) * 1.5));
     spawnItem();
   }
 
   // ── 敵の追加スポーン（時間経過で増える） ─────────────────────
   // 残り40秒で浪費モンスターを追加
-  if (!enemy2Added && timeLeft <= 40) {
+  if (!enemy2Added && timeLeft <= 13) {
     enemy2Added = true;
     spawnEnemy(1);
   }
   // 残り25秒で不安オバケを追加
-  if (!enemy3Added && timeLeft <= 25) {
+  if (!enemy3Added && timeLeft <= 7) {
     enemy3Added = true;
     spawnEnemy(2);
   }
@@ -449,7 +471,7 @@ function update() {
 
       // エフェクト（レアは金色、通常は青みがかった白）
       const fxColor = item.rare ? '#ffcc00' : '#99bbff';
-      const fxText  = `+${item.pts}pt  +${item.money.toLocaleString()}円`;
+      const fxText  = `+${item.pts}pt  +${fmtMoney(item.money)}`;
       spawnCollectFX(item.x, item.y, fxColor, fxText);
 
       return false; // アイテムを消す
@@ -483,27 +505,12 @@ function update() {
     if (player.invincible > 0) continue;
     if (dist(enemy.x, enemy.y, player.x, player.y) >= enemy.size + player.size) continue;
 
-    // ヒット！ダメージを与える
-    if (enemy.effect === 'life') {
-      lives--;
-      floatTexts.push({ x: player.x, y: player.y - 24, text: '💔 ライフ－１！', color: COLOR.textRed, life: 60, maxLife: 60 });
-    } else if (enemy.effect === 'money') {
-      money = Math.max(0, money + enemy.value);
-      floatTexts.push({ x: player.x, y: player.y - 24, text: `💸 ${Math.abs(enemy.value).toLocaleString()}円 減！`, color: COLOR.textRed, life: 60, maxLife: 60 });
-    } else if (enemy.effect === 'score') {
-      score = Math.max(0, score + enemy.value);
-      floatTexts.push({ x: player.x, y: player.y - 24, text: `😵 スコア${Math.abs(enemy.value)}減！`, color: COLOR.textRed, life: 60, maxLife: 60 });
-    }
+    // ヒット！年収が減る
+    money = Math.max(0, money + enemy.value);
+    floatTexts.push({ x: player.x, y: player.y - 24, text: `${enemy.emoji} 年収 ${fmtMoney(Math.abs(enemy.value))} 減！`, color: COLOR.textRed, life: 60, maxLife: 60 });
 
-    player.invincible = 120; // 2秒間の無敵（120フレーム）
+    player.invincible = 60; // 1秒間の無敵（60フレーム）
     triggerShake();
-
-    // ライフが0になったらゲームオーバー
-    if (lives <= 0) {
-      lives = 0;
-      state = 'GAMEOVER';
-      return;
-    }
   }
 
   // ── パーティクルの更新 ────────────────────────────────────────
@@ -572,18 +579,12 @@ function drawHUD() {
   ctx.textBaseline = 'alphabetic';
 
   // ── 1行目 ──
-  // ❤️ ライフ（左）
-  ctx.font      = '13px Arial';
-  ctx.fillStyle = COLOR.textDark;
-  ctx.textAlign = 'left';
-  ctx.fillText('ライフ', 14, 22);
-
   // ⏱ 残り時間（中央）
   ctx.textAlign = 'center';
-  ctx.fillStyle = timeLeft <= 10 ? COLOR.textRed : COLOR.textDark;
+  ctx.fillStyle = timeLeft <= 6 ? COLOR.textRed : COLOR.textDark;
   ctx.font      = '11px Arial';
   ctx.fillText('⏱ 残り時間', W / 2, 18);
-  ctx.font      = `bold ${timeLeft <= 10 ? 26 : 22}px Arial`;
+  ctx.font      = `bold ${timeLeft <= 6 ? 26 : 22}px Arial`;
   ctx.fillText(`${timeLeft}秒`, W / 2, 46);
 
   // 🏆 スコア（右）
@@ -593,21 +594,11 @@ function drawHUD() {
   ctx.fillText(`🏆 ${score.toLocaleString()}pt`, W - 14, 22);
 
   // ── 2行目 ──
-  // ❤️ ハート（左）
-  ctx.textAlign    = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.font         = '18px serif';
-  const heartsStr =
-    '❤️'.repeat(Math.max(0, lives)) +
-    '🖤'.repeat(Math.max(0, 3 - lives));
-  ctx.fillText(heartsStr, 12, 55);
-  ctx.textBaseline = 'alphabetic';
-
-  // 💰 お金（中央左よりに）
-  ctx.textAlign = 'center';
+  // 💰 お金（左寄り）
+  ctx.textAlign = 'left';
   ctx.fillStyle = COLOR.textGold;
   ctx.font      = 'bold 13px Arial';
-  ctx.fillText(`💰 ${fmtMoney(money)}`, W / 2 - 60, 62);
+  ctx.fillText(`💰 ${fmtMoney(money)}`, 14, 62);
 
   // 👔 レベル・肩書き（右）
   const lv = getLevel();
@@ -786,8 +777,8 @@ function drawTitle() {
   const rules = [
     '矢印キーで 🧑‍💻 を動かそう！',
     'スキルアイテムを集めてお金持ちエンジニアへ✨',
-    '敵（😈🛒😵）に当たるとライフが減るよ',
-    '60秒間でどれだけ稼げるかな？',
+    '敵（😈🛒😵）に当たると年収が減るよ！',
+    '20秒間でどれだけ稼げるかな？',
   ];
   rules.forEach((r, i) => ctx.fillText(r, W / 2, 258 + i * 26));
 
@@ -813,16 +804,19 @@ function drawTitle() {
   ctx.fillStyle = '#aa88bb';
   ctx.fillText('移動：← ↑ ↓ →　または　W A S D', W / 2, 506);
 
-  // ── スコアランク表 ──
-  ctx.font      = '11px Arial';
+  // ── ハイスコア＋ランク表 ──
+  const hs = getHighScore();
+  ctx.font      = 'bold 12px Arial';
+  ctx.fillStyle = '#cc8800';
+  ctx.fillText(`🏅 ハイスコア：${fmtMoney(hs)}`, W / 2, 534);
+  ctx.font      = '10px Arial';
   ctx.fillStyle = '#9977bb';
-  ctx.fillText('💰 100,000円以上 → お金持ちエンジニア達成！', W / 2, 546);
-  ctx.fillText('💰 60,000円 以上 → 稼げる人材', W / 2, 564);
-  ctx.fillText('💰 30,000円 以上 → スキル成長中', W / 2, 582);
+  ctx.fillText('🏆¥1億〜 神エンジニア　💰¥5000万〜 小金持ち　💡¥1000万〜 大台', W / 2, 554);
+  ctx.fillText('😤¥500万〜 SES社員　📚¥0〜 勉強中（無収入）', W / 2, 570);
   ctx.strokeStyle = 'rgba(160, 120, 200, 0.45)';
   ctx.lineWidth   = 1;
   ctx.beginPath();
-  ctx.roundRect(W / 2 - 175, 532, 350, 60, 8);
+  ctx.roundRect(W / 2 - 175, 520, 350, 60, 8);
   ctx.stroke();
 }
 
@@ -861,7 +855,7 @@ function drawGameOver() {
   // スコア・お金・肩書き・取得数
   const rows = [
     { label: `🏆 スコア`, value: `${score.toLocaleString()} pt`,          color: COLOR.textBlue  },
-    { label: `💰 所持金`, value: `${fmtMoney(money)}`,                    color: COLOR.textGold  },
+    { label: `💰 年収`,   value: `${fmtMoney(money)}`,                    color: COLOR.textGold  },
     { label: `👔 肩書き`, value: `Lv.${getLevel().lv} ${getLevel().title}`, color: COLOR.textMid  },
     { label: `📦 スキル`, value: `${itemsCollected} 個取得`,               color: COLOR.textGreen },
   ];
@@ -883,10 +877,10 @@ function drawGameOver() {
   ctx.font      = '12px Arial';
   ctx.fillStyle = '#9977aa';
   ctx.fillText(
-    money >= 100000 ? '🎊 お金持ちエンジニア達成！最高記録を更新しよう！'
-    : money >= 60000  ? '惜しい！もう少しで¥100,000円！'
-    : money >= 30000  ? 'レアアイテム（💎🚀👑）を意識してみよう！'
-    :                   '💡 敵を避けてアイテムを集めよう！',
+    money >= 100000000 ? '🎊 神エンジニア達成！伝説を刻んだ！'
+    : money >= 50000000  ? `惜しい！あと${fmtMoney(100000000 - money)}で神エンジニア！`
+    : money >= 10000000  ? 'レアアイテム（💎🚀👑）を狙って年収アップ！'
+    :                      '💡 敵を避けてスキルを集めよう！',
     W / 2, 380
   );
 
@@ -906,13 +900,19 @@ function drawGameOver() {
   ctx.roundRect(W / 2 + 20, 438, 140, 46, 12);
   ctx.fill();
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('[SPC] タイトルへ', W / 2 + 90, 466);
+  ctx.fillText('[ T ] タイトルへ', W / 2 + 90, 466);
 
-  // ── ランク一覧（2行に分けて表示） ──
-  ctx.font      = '11px Arial';
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillText('📚¥0〜  🌱¥10,000〜  📈¥30,000〜', W / 2, 498);
-  ctx.fillText('💼¥60,000〜  🏆¥100,000〜 お金持ちエンジニア！', W / 2, 514);
+  // ── ハイスコア ──
+  const hs2 = getHighScore();
+  ctx.font      = 'bold 12px Arial';
+  ctx.fillStyle = '#ffcc44';
+  ctx.fillText(`🏅 ハイスコア：${fmtMoney(hs2)}`, W / 2, 498);
+
+  // ── ランク一覧 ──
+  ctx.font      = '10px Arial';
+  ctx.fillStyle = 'rgba(255,255,255,0.50)';
+  ctx.fillText('📚¥0  😤¥500万  💡¥1000万  🧑‍💼¥2000万  🔥¥3000万', W / 2, 516);
+  ctx.fillText('🌏¥4000万  💰¥5000万  🦄¥7000万  👑¥8500万  🏆¥1億', W / 2, 530);
 }
 
 
